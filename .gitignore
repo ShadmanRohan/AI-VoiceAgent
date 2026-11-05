@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# Node
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.log
+npm-debug.log*
+
+# Environment & secrets
+.env
+.env.local
+*.pem
+
+# Local data (never commit conversations / DB / weights)
+data/*.db
+data/*.db-*
+data/exports/
+models/**
+!models/.gitkeep
+*.onnx
+*.bin
+*.pt
+*.pth
+*.safetensors
+*.gguf
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Benchmarks / temp
+tmp/
+.cache/
+benchmarks/results/
+*.wav
+*.mp3
+!docs/**

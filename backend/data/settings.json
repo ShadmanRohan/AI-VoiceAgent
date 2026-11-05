@@ -1,0 +1,10 @@
+{
+  "ollama_model": "qwen3:1.7b",
+  "moonshine_model": "base-streaming",
+  "llm_context_tokens": 8192,
+  "memory_top_k": 8,
+  "memory_token_budget": 1200,
+  "working_memory_token_budget": 2500,
+  "tts_speed": 1.0,
+  "resolved_profile": "quality"
+}

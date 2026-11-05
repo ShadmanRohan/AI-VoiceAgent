@@ -1,9 +1,8 @@
-"""FAISS-backed local vector index persisted under data/vectors."""
+"""FAISS-backed local vector index with embedding-version namespaces."""
 
 from __future__ import annotations
 
 import json
-from typing import Any
 
 import numpy as np
 from loguru import logger
@@ -12,11 +11,18 @@ from app.config import get_settings
 
 
 class VectorStore:
-    def __init__(self, user_id: str, dimension: int = 384) -> None:
+    def __init__(
+        self,
+        user_id: str,
+        dimension: int = 384,
+        *,
+        index_version: str | None = None,
+    ) -> None:
         settings = get_settings()
         self.user_id = user_id
         self.dimension = dimension
-        self.dir = settings.data_dir / "vectors" / user_id
+        self.index_version = index_version or settings.embedding_index_version
+        self.dir = settings.data_dir / "vectors" / self.index_version / user_id
         self.dir.mkdir(parents=True, exist_ok=True)
         self.index_path = self.dir / "index.faiss"
         self.meta_path = self.dir / "meta.json"
@@ -33,6 +39,7 @@ class VectorStore:
             meta = json.loads(self.meta_path.read_text(encoding="utf-8"))
             self._id_map = list(meta.get("ids", []))
             self.dimension = int(meta.get("dimension", self.dimension))
+            self.index_version = meta.get("index_version", self.index_version)
         if self.vectors_path.exists():
             self._vectors = np.load(self.vectors_path).astype(np.float32)
         else:
@@ -47,13 +54,18 @@ class VectorStore:
         faiss.write_index(self._index, str(self.index_path))
         np.save(self.vectors_path, self._vectors)
         self.meta_path.write_text(
-            json.dumps({"ids": self._id_map, "dimension": self.dimension}),
+            json.dumps(
+                {
+                    "ids": self._id_map,
+                    "dimension": self.dimension,
+                    "index_version": self.index_version,
+                    "embedding_model": get_settings().embedding_model,
+                }
+            ),
             encoding="utf-8",
         )
 
     def add(self, vector_id: str, vector: np.ndarray) -> None:
-        import faiss
-
         vec = np.asarray(vector, dtype=np.float32).reshape(1, -1)
         if vec.shape[1] != self.dimension:
             raise ValueError(f"Expected dim {self.dimension}, got {vec.shape[1]}")
@@ -97,6 +109,9 @@ class VectorStore:
             results.append((self._id_map[idx], float(score)))
         return results
 
+    def count(self) -> int:
+        return len(self._id_map)
+
     def clear(self) -> None:
         import faiss
 
@@ -104,16 +119,23 @@ class VectorStore:
         self._id_map = []
         self._vectors = np.zeros((0, self.dimension), dtype=np.float32)
         self._save()
-        logger.info("Cleared vector store for user {}", self.user_id)
+        logger.info("Cleared vector store user={} version={}", self.user_id, self.index_version)
 
 
 _stores: dict[str, VectorStore] = {}
 
 
-def get_vector_store(user_id: str, dimension: int = 384) -> VectorStore:
-    key = f"{user_id}:{dimension}"
+def get_vector_store(
+    user_id: str,
+    dimension: int = 384,
+    *,
+    index_version: str | None = None,
+) -> VectorStore:
+    settings = get_settings()
+    version = index_version or settings.embedding_index_version
+    key = f"{user_id}:{dimension}:{version}"
     if key not in _stores:
-        _stores[key] = VectorStore(user_id, dimension=dimension)
+        _stores[key] = VectorStore(user_id, dimension=dimension, index_version=version)
     return _stores[key]
 
 

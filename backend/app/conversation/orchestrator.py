@@ -12,12 +12,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings, get_settings
 from app.conversation.sessions import SessionService
 from app.conversation.state import ConversationState, StateMachine
+from app.language.bengali_normalizer import process_transcript
+from app.language.language_router import (
+    ConversationLanguageState,
+    LanguageMode,
+    route_language,
+)
 from app.memory.context_builder import ContextBuilder
 from app.memory.extraction import detect_memory_intent, extract_candidates_with_llm
 from app.memory.service import MemoryService
 from app.models.llm import OllamaLLM, sanitize_for_tts
 from app.monitoring.metrics import MetricsCollector
 from app.tools.registry import ToolExecutor
+
+# Per-process language state keyed by session id
+_LANG_STATE: dict[str, ConversationLanguageState] = {}
 
 
 class ConversationOrchestrator:
@@ -39,6 +48,10 @@ class ConversationOrchestrator:
         self.active_generation_id: str | None = None
         self.session_id: str | None = None
         self.user_id = self.settings.default_user_id
+        self.lang_state = ConversationLanguageState(
+            mode=LanguageMode(self.settings.language_mode.value)
+        )
+        self.last_language_decision = None
 
     async def ensure_session(self, session_id: str | None = None) -> str:
         if session_id:
@@ -78,6 +91,28 @@ class ConversationOrchestrator:
         await self.ensure_session(session_id)
         assert self.session_id
 
+        # Restore / bind per-session language state
+        if self.session_id in _LANG_STATE:
+            self.lang_state = _LANG_STATE[self.session_id]
+        else:
+            self.lang_state.set_mode(self.settings.language_mode.value)
+            _LANG_STATE[self.session_id] = self.lang_state
+
+        processed = process_transcript(text)
+        text = processed.normalized_transcript or processed.original_transcript
+        decision = route_language(text, self.lang_state)
+        self.last_language_decision = decision
+        yield {
+            "type": "language",
+            "mode": decision.mode.value,
+            "detected": decision.detected.value,
+            "response_language": decision.response_language.value,
+            "tts_provider": decision.tts_provider,
+            "reason": decision.reason,
+            "original_transcript": processed.original_transcript,
+            "normalized_transcript": processed.normalized_transcript,
+        }
+
         try:
             self.state.transition(ConversationState.PROCESSING)
         except ValueError:
@@ -85,7 +120,16 @@ class ConversationOrchestrator:
 
         if store_user:
             await self.sessions.add_message(
-                self.session_id, "USER", text, finalized=True, spoken_status="not_applicable"
+                self.session_id,
+                "USER",
+                processed.original_transcript or text,
+                finalized=True,
+                spoken_status="not_applicable",
+                meta={
+                    "normalized_transcript": processed.normalized_transcript,
+                    "detected_language": decision.detected.value,
+                    "response_language": decision.response_language.value,
+                },
             )
 
         # Memory intents
@@ -160,7 +204,17 @@ class ConversationOrchestrator:
         ][:-1]  # exclude the just-added user message duplicate if present
 
         sess = await self.sessions.get_session(self.session_id)
+        lang_directive = {
+            "bangla": "Respond in Bangladeshi Standard Colloquial Bengali (চলিত বাংলা). Keep it spoken and natural.",
+            "english": "Respond in clear, natural English for speech.",
+            "mixed": "Respond primarily in Bangladeshi Colloquial Bengali, keeping technical English terms as spoken.",
+        }.get(decision.response_language.value, "")
+        system_prompt = self.settings.system_prompt
+        if lang_directive:
+            system_prompt = f"{system_prompt}\n\n## CURRENT TURN LANGUAGE\n{lang_directive}"
+
         built = self.context_builder.build(
+            system_prompt=system_prompt,
             long_term_memories=retrieved,
             session_summary=sess.summary if sess else None,
             recent_turns=recent_turns,
@@ -170,6 +224,7 @@ class ConversationOrchestrator:
             "type": "context",
             "memory_ids": built.memory_ids,
             "token_estimate": built.token_estimate,
+            "response_language": decision.response_language.value,
         }
 
         # Tool shortcuts from simple phrases

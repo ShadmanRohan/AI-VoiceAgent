@@ -25,6 +25,7 @@ from app.api.schemas import (
     TaskCreate,
     TaskUpdate,
     ToolRequest,
+    TTSRequest,
 )
 from app.config import PROFILE_PRESETS, get_settings, reload_settings
 from app.conversation.orchestrator import ConversationOrchestrator
@@ -32,8 +33,11 @@ from app.conversation.sessions import SessionService
 from app.database.session import get_db_session
 from app.memory.service import MemoryService
 from app.models.llm import OllamaLLM
+from app.language.language_router import DetectedLanguage
 from app.monitoring.hardware import build_hardware_report, resolve_profile
 from app.monitoring.metrics import APP_METRICS
+from app.monitoring.model_status import collect_model_status
+from app.speech.tts_router import TTSRouter
 from app.tools.registry import TOOL_SCHEMAS, ToolExecutor
 
 router = APIRouter()
@@ -74,9 +78,13 @@ async def list_models() -> dict[str, Any]:
         models = await llm.list_models()
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(503, f"Ollama unavailable: {exc}") from exc
+    readiness = await collect_model_status()
     return {
         "ollama": models,
-        "stt": ["moonshine", "whisper"],
+        "stt": ["whisper_turbo", "moonshine", "whisper"],
+        "stt_models": ["large-v3-turbo", "tiny", "base", "small"],
+        "llm_options": ["qwen3.5:4b", "qwen3:1.7b", "qwen3:4b-instruct"],
+        "bengali_tts_voices": ["Aditi", "Arjun", "Tapan", "Rashmi"],
         "tts_voices": [
             "af_heart",
             "af_bella",
@@ -88,8 +96,65 @@ async def list_models() -> dict[str, Any]:
             "bm_george",
             "bm_lewis",
         ],
+        "language_modes": ["auto", "bangla", "english"],
         "profiles": list(PROFILE_PRESETS.keys()),
+        "readiness": readiness,
     }
+
+
+@router.get("/models/status")
+async def models_status() -> dict[str, Any]:
+    return await collect_model_status()
+
+
+@router.post("/tts/synthesize")
+async def tts_synthesize(body: TTSRequest):
+    """Synthesize speech via Indic Parler (Bengali) or Kokoro (English)."""
+    import base64
+
+    settings = get_settings()
+    router = TTSRouter(settings)
+    lang = body.language
+    response_language = None
+    if lang in {"bangla", "bn", "bn-BD"}:
+        response_language = DetectedLanguage.BANGLA
+    elif lang in {"english", "en"}:
+        response_language = DetectedLanguage.ENGLISH
+    try:
+        chunks = []
+        async for chunk in router.synthesize(
+            body.text,
+            voice=body.voice,
+            generation_id=body.generation_id,
+            response_language=response_language,
+        ):
+            chunks.append(chunk)
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc)) from exc
+    if not chunks:
+        raise HTTPException(500, "No audio generated")
+    pcm = b"".join(c.pcm for c in chunks)
+    sr = chunks[0].sample_rate
+    provider = (chunks[0].meta or {}).get("provider")
+    return {
+        "provider": provider,
+        "sample_rate": sr,
+        "channels": 1,
+        "format": "pcm_s16le",
+        "audio_base64": base64.b64encode(pcm).decode("ascii"),
+        "bytes": len(pcm),
+    }
+
+
+@router.post("/memory/reindex-e5")
+async def reindex_e5() -> dict[str, Any]:
+    """Rebuild multilingual E5 index from existing memory text (non-destructive)."""
+    from app.memory.reindex import reindex_memories_to_e5
+
+    try:
+        return await reindex_memories_to_e5(activate=True)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(500, f"Reindex failed: {exc}") from exc
 
 
 @router.get("/settings")

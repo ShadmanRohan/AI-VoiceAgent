@@ -98,10 +98,12 @@ class OllamaLLM:
             if model not in available:
                 for candidate in (
                     self.settings.ollama_model,
+                    getattr(self.settings, "ollama_model_fallback", None) or "qwen3:1.7b",
+                    "qwen3.5:4b",
                     "qwen3:1.7b",
                     self.settings.ollama_model_quality,
                 ):
-                    if candidate in available:
+                    if candidate and candidate in available:
                         logger.warning(
                             "Model {} unavailable; falling back to {}", model, candidate
                         )

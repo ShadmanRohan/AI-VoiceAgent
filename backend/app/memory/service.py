@@ -135,11 +135,20 @@ class MemoryService:
         return False
 
     async def _reindex(self, memory: Memory) -> None:
-        vector = await self.embeddings.embed_one(memory.content)
-        store = get_vector_store(memory.user_id, dimension=vector.shape[0])
+        vector = await self.embeddings.embed_passage(memory.content)
+        store = get_vector_store(
+            memory.user_id,
+            dimension=vector.shape[0],
+            index_version=self.settings.embedding_index_version,
+        )
         if not memory.vector_id:
             memory.vector_id = str(uuid.uuid4())
         store.add(memory.vector_id, vector)
+        memory.meta = {
+            **(memory.meta or {}),
+            "embedding_model": self.settings.embedding_model,
+            "embedding_index_version": self.settings.embedding_index_version,
+        }
 
     async def update_memory(
         self,
@@ -182,8 +191,16 @@ class MemoryService:
         if memory is None:
             return False
         if memory.vector_id:
-            store = get_vector_store(user_id)
+            store = get_vector_store(
+                user_id, index_version=self.settings.embedding_index_version
+            )
             store.remove(memory.vector_id)
+            # Also attempt removal from legacy index if present
+            try:
+                legacy = get_vector_store(user_id, index_version="bge-small-v1")
+                legacy.remove(memory.vector_id)
+            except Exception:  # noqa: BLE001
+                pass
         await self._event(user_id, memory.id, "deleted", {"content_preview": memory.content[:80]})
         await self.session.delete(memory)
         await self.session.flush()
@@ -220,8 +237,12 @@ class MemoryService:
     async def find_similar(
         self, user_id: str, text: str, top_k: int = 5
     ) -> list[tuple[Memory, float]]:
-        vector = await self.embeddings.embed_one(text)
-        store = get_vector_store(user_id, dimension=vector.shape[0])
+        vector = await self.embeddings.embed_query(text)
+        store = get_vector_store(
+            user_id,
+            dimension=vector.shape[0],
+            index_version=self.settings.embedding_index_version,
+        )
         hits = store.search(vector, top_k=top_k)
         if not hits:
             return []

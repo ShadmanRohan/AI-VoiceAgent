@@ -17,11 +17,20 @@ class SettingsUpdate(BaseModel):
     model_config = {"extra": "forbid"}
 
     performance_profile: Optional[str] = None
+    language_mode: Optional[str] = None
+    auto_language_routing: Optional[bool] = None
+    primary_language: Optional[str] = None
+    secondary_language: Optional[str] = None
     stt_provider: Optional[str] = None
+    stt_model: Optional[str] = None
     moonshine_model: Optional[str] = None
     tts_voice: Optional[str] = None
     tts_speed: Optional[float] = None
+    bengali_tts_provider: Optional[str] = None
+    bengali_tts_voice: Optional[str] = None
+    english_tts_provider: Optional[str] = None
     ollama_model: Optional[str] = None
+    ollama_model_fallback: Optional[str] = None
     vad_confidence: Optional[float] = None
     vad_start_secs: Optional[float] = None
     vad_stop_secs: Optional[float] = None
@@ -33,9 +42,17 @@ class SettingsUpdate(BaseModel):
     system_prompt: Optional[str] = None
     memory_consent_default: Optional[bool] = None
     memory_top_k: Optional[int] = None
+    embedding_model: Optional[str] = None
     push_to_talk: Optional[bool] = None
     tts_chunk_min_chars: Optional[int] = None
     tts_chunk_max_chars: Optional[int] = None
+
+
+class TTSRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+    language: Optional[str] = None  # bangla | english | auto
+    voice: Optional[str] = None
+    generation_id: Optional[str] = None
 
 
 class SessionCreate(BaseModel):

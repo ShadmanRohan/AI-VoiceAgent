@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { api } from '../services/api'
 import type { AppSettings } from '../types'
 
-const VOICES = [
+const EN_VOICES = [
   'af_heart',
   'af_bella',
   'af_sarah',
@@ -14,9 +14,12 @@ const VOICES = [
   'bm_lewis',
 ]
 
+const BN_VOICES = ['Aditi', 'Arjun', 'Tapan', 'Rashmi']
+
 export function SettingsPanel() {
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [models, setModels] = useState<string[]>([])
+  const [readiness, setReadiness] = useState<Record<string, unknown> | null>(null)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -26,6 +29,7 @@ export function SettingsPanel() {
         const [s, m] = await Promise.all([api.getSettings(), api.models()])
         setSettings(s)
         setModels((m.ollama as string[]) || [])
+        setReadiness((m.readiness as Record<string, unknown>) || null)
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e))
       }
@@ -46,10 +50,14 @@ export function SettingsPanel() {
       const next = await api.updateSettings(settings)
       setSettings(next)
       setSaved(true)
+      const m = await api.models()
+      setReadiness((m.readiness as Record<string, unknown>) || null)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
   }
+
+  const bnTts = (readiness?.models as Record<string, any> | undefined)?.bengali_tts
 
   return (
     <section className="rounded-2xl border border-[var(--line)] bg-[var(--bg1)]/80 p-5">
@@ -60,7 +68,36 @@ export function SettingsPanel() {
         </button>
       </div>
 
+      <div className="mb-5 rounded-xl border border-[var(--line)] bg-[var(--bg2)] p-3 text-sm">
+        <div className="mb-1 font-medium">Model readiness</div>
+        <ul className="space-y-1 text-[var(--muted)]">
+          <li>Language mode: {String(settings.language_mode || 'auto')}</li>
+          <li>LLM: {String(settings.ollama_model)}</li>
+          <li>STT: {String(settings.stt_provider)} / {String(settings.stt_model || '')}</li>
+          <li>
+            Bengali TTS:{' '}
+            {bnTts?.available
+              ? `available (${bnTts.device || 'device TBD'})`
+              : bnTts?.error || 'unavailable — set HF_TOKEN after accepting model terms'}
+          </li>
+          <li>English TTS: Kokoro ({String(settings.tts_voice)})</li>
+          <li>HF token configured: {String(settings.hf_token_configured)}</li>
+        </ul>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2">
+        <Field label="Language mode">
+          <select
+            className="field"
+            value={String(settings.language_mode || 'auto')}
+            onChange={(e) => set('language_mode', e.target.value)}
+          >
+            <option value="auto">Auto</option>
+            <option value="bangla">বাংলা</option>
+            <option value="english">English</option>
+          </select>
+        </Field>
+
         <Field label="Performance profile">
           <select
             className="field"
@@ -80,15 +117,24 @@ export function SettingsPanel() {
             value={String(settings.ollama_model)}
             onChange={(e) => set('ollama_model', e.target.value)}
           >
-            {[String(settings.ollama_model), ...models.filter((m) => m !== settings.ollama_model)].map(
-              (m) => (
+            {['qwen3.5:4b', 'qwen3:1.7b', 'qwen3:4b-instruct', ...models]
+              .filter((v, i, a) => a.indexOf(v) === i)
+              .map((m) => (
                 <option key={m} value={m}>
                   {m}
                 </option>
-              ),
-            )}
+              ))}
+          </select>
+        </Field>
+
+        <Field label="Fallback LLM">
+          <select
+            className="field"
+            value={String(settings.ollama_model_fallback || 'qwen3:1.7b')}
+            onChange={(e) => set('ollama_model_fallback', e.target.value)}
+          >
             <option value="qwen3:1.7b">qwen3:1.7b</option>
-            <option value="qwen3:4b-instruct">qwen3:4b-instruct</option>
+            <option value="qwen3.5:4b">qwen3.5:4b</option>
           </select>
         </Field>
 
@@ -98,18 +144,46 @@ export function SettingsPanel() {
             value={String(settings.stt_provider)}
             onChange={(e) => set('stt_provider', e.target.value)}
           >
-            <option value="moonshine">moonshine</option>
-            <option value="whisper">whisper</option>
+            <option value="whisper_turbo">Whisper Large V3 Turbo</option>
+            <option value="moonshine">Moonshine (fallback)</option>
+            <option value="whisper">Whisper</option>
           </select>
         </Field>
 
-        <Field label="TTS voice">
+        <Field label="STT model">
+          <select
+            className="field"
+            value={String(settings.stt_model || 'large-v3-turbo')}
+            onChange={(e) => set('stt_model', e.target.value)}
+          >
+            <option value="large-v3-turbo">large-v3-turbo</option>
+            <option value="tiny">tiny</option>
+            <option value="base">base</option>
+            <option value="small">small</option>
+          </select>
+        </Field>
+
+        <Field label="Bengali TTS voice (Indic Parler)">
+          <select
+            className="field"
+            value={String(settings.bengali_tts_voice || 'Aditi')}
+            onChange={(e) => set('bengali_tts_voice', e.target.value)}
+          >
+            {BN_VOICES.map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <Field label="English TTS voice (Kokoro)">
           <select
             className="field"
             value={String(settings.tts_voice)}
             onChange={(e) => set('tts_voice', e.target.value)}
           >
-            {VOICES.map((v) => (
+            {EN_VOICES.map((v) => (
               <option key={v} value={v}>
                 {v}
               </option>
@@ -141,30 +215,6 @@ export function SettingsPanel() {
           />
         </Field>
 
-        <Field label="VAD stop seconds">
-          <input
-            className="field"
-            type="number"
-            step="0.05"
-            min="0.05"
-            max="2"
-            value={Number(settings.vad_stop_secs)}
-            onChange={(e) => set('vad_stop_secs', Number(e.target.value))}
-          />
-        </Field>
-
-        <Field label="LLM temperature">
-          <input
-            className="field"
-            type="number"
-            step="0.05"
-            min="0"
-            max="1.5"
-            value={Number(settings.llm_temperature)}
-            onChange={(e) => set('llm_temperature', Number(e.target.value))}
-          />
-        </Field>
-
         <Field label="Context tokens">
           <input
             className="field"
@@ -174,14 +224,6 @@ export function SettingsPanel() {
             max="32768"
             value={Number(settings.llm_context_tokens)}
             onChange={(e) => set('llm_context_tokens', Number(e.target.value))}
-          />
-        </Field>
-
-        <Field label="Push to talk fallback">
-          <input
-            type="checkbox"
-            checked={Boolean(settings.push_to_talk)}
-            onChange={(e) => set('push_to_talk', e.target.checked)}
           />
         </Field>
 

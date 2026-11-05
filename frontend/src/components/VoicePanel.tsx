@@ -35,6 +35,7 @@ function VoiceInner({
   const [textInput, setTextInput] = useState('')
   const [textSessionId, setTextSessionId] = useState<string | null>(null)
   const [busyText, setBusyText] = useState(false)
+  const [langInfo, setLangInfo] = useState<string>('auto')
   const botBuf = useRef('')
 
   const isConnected = transportState === 'ready'
@@ -170,6 +171,14 @@ function VoiceInner({
       const res = await api.chat(text, textSessionId || undefined)
       setTextSessionId(res.session_id)
       onSessionHint(res.session_id)
+      const langEvent = (res as { events?: Array<Record<string, string>> }).events?.find(
+        (e) => e.type === 'language',
+      )
+      if (langEvent) {
+        setLangInfo(
+          `${langEvent.detected || '?'} → ${langEvent.response_language || '?'} (${langEvent.tts_provider || ''})`,
+        )
+      }
       setLines((prev) => [
         ...prev,
         { id: res.message_id || crypto.randomUUID(), role: 'assistant', text: res.text },
@@ -224,10 +233,11 @@ function VoiceInner({
           <AudioMeter level={aiSpeaking ? level : 0} active={aiSpeaking} label="AI speaking" />
         </div>
 
-        <div className="mb-3 flex gap-3 text-sm">
+        <div className="mb-3 flex flex-wrap gap-3 text-sm">
           <StatusChip on={isConnected} label="Connected" />
           <StatusChip on={isConnected && !muted} label="Mic live" />
           <StatusChip on={aiSpeaking} label="AI audio" />
+          <StatusChip on={true} label={`Lang ${langInfo}`} />
         </div>
 
         <div className="h-[420px] space-y-3 overflow-y-auto rounded-xl border border-[var(--line)] bg-black/20 p-4">

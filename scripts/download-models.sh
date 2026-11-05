@@ -7,11 +7,8 @@ export LD_LIBRARY_PATH="${HOME}/.local/ollama/lib/ollama:${LD_LIBRARY_PATH:-}"
 "$ROOT/scripts/start-ollama.sh"
 
 echo "==> Pulling Ollama LLM models"
-ollama pull qwen3:1.7b
-# Optional higher-quality model (comment out if low VRAM/disk)
-if [[ "${PULL_QUALITY:-0}" == "1" ]]; then
-  ollama pull qwen3:4b-instruct
-fi
+ollama pull qwen3.5:4b
+ollama pull qwen3:1.7b   # fallback
 
 echo "==> Prefetching embedding model via Python"
 cd "$ROOT/backend"
@@ -19,8 +16,12 @@ cd "$ROOT/backend"
 source .venv/bin/activate
 python - <<'PY'
 from sentence_transformers import SentenceTransformer
-SentenceTransformer("BAAI/bge-small-en-v1.5")
-print("bge-small-en-v1.5 ready")
+SentenceTransformer("intfloat/multilingual-e5-small")
+print("multilingual-e5-small ready")
+# Legacy rollback model (optional)
+if __import__("os").environ.get("PULL_LEGACY_BGE") == "1":
+    SentenceTransformer("BAAI/bge-small-en-v1.5")
+    print("bge-small-en-v1.5 ready")
 PY
 
 echo "==> Prefetching Kokoro TTS (first construct downloads ONNX)"

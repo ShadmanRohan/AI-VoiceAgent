@@ -1,10 +1,15 @@
 {
-  "ollama_model": "qwen3:1.7b",
+  "ollama_model": "qwen3.5:4b",
   "moonshine_model": "base-streaming",
   "llm_context_tokens": 8192,
   "memory_top_k": 8,
   "memory_token_budget": 1200,
   "working_memory_token_budget": 2500,
   "tts_speed": 1.0,
-  "resolved_profile": "quality"
+  "resolved_profile": "quality",
+  "stt_provider": "whisper_turbo",
+  "stt_model": "large-v3-turbo",
+  "embedding_model": "intfloat/multilingual-e5-small",
+  "embedding_index_version": "e5-small-v1",
+  "bilingual_memory": true
 }

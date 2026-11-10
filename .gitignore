@@ -15,23 +15,49 @@ env/
 htmlcov/
 dist/
 build/
+*.egg
 
-# Node
+# Node / frontend
 node_modules/
 frontend/dist/
 frontend/.vite/
 *.log
 npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
 # Environment & secrets
 .env
-.env.local
+.env.*
+!.env.example
 *.pem
+*.key
+HF_TOKEN
+.huggingface/
+.cache/huggingface/
 
-# Local data (never commit conversations / DB / weights)
+# Local runtime data (conversations, DB, user settings, embeddings)
 data/*.db
 data/*.db-*
+data/*.sqlite
+data/*.sqlite-*
 data/exports/
+data/backups/
+data/vectors/
+data/settings.json
+data/benchmark-results.json
+backend/data/*.db
+backend/data/*.db-*
+backend/data/*.sqlite
+backend/data/*.sqlite-*
+backend/data/backups/
+backend/data/vectors/
+backend/data/settings.json
+backend/tests/_tmp/
+*.faiss
+*.npy
+
+# Model weights & downloads (keep placeholder only)
 models/**
 !models/.gitkeep
 *.onnx
@@ -40,6 +66,26 @@ models/**
 *.pth
 *.safetensors
 *.gguf
+*.ckpt
+*.h5
+*.npz
+*.npz.index
+*.npz.data-*
+
+# Packages / binaries accidentally dropped in-tree
+*.deb
+*.rpm
+*.dmg
+*.exe
+*.AppImage
+
+# Audio / media artifacts
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.m4a
+*.webm
 
 # OS / IDE
 .DS_Store
@@ -47,11 +93,16 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+*~
 
-# Benchmarks / temp
+# Temp / caches / benchmarks
 tmp/
 .cache/
+.turbo/
 benchmarks/results/
-*.wav
-*.mp3
-!docs/**
+*.tmp
+*.bak
+
+# Cursor / agent local
+.cursor/
+agent-transcripts/

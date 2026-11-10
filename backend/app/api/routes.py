@@ -82,7 +82,7 @@ async def list_models() -> dict[str, Any]:
     return {
         "ollama": models,
         "stt": ["whisper_turbo", "moonshine", "whisper"],
-        "stt_models": ["large-v3-turbo", "tiny", "base", "small"],
+        "stt_models": ["large-v3", "large-v3-turbo", "small", "base", "tiny"],
         "llm_options": ["qwen3.5:4b", "qwen3:1.7b", "qwen3:4b-instruct"],
         "bengali_tts_voices": ["Aditi", "Arjun", "Tapan", "Rashmi"],
         "tts_voices": [

@@ -56,6 +56,7 @@ class IndicParlerTTSProvider(TTSProvider):
         self._device = "cpu"
         self._lock = asyncio.Lock()
         self._cancel: set[str] = set()
+        self._access_checked = False
         self.status = IndicParlerAvailability()
         self.status.model_id = self.model_id
 
@@ -67,7 +68,23 @@ class IndicParlerTTSProvider(TTSProvider):
         return template.format(voice=voice)
 
     async def check_access(self) -> IndicParlerAvailability:
+        # Cache result — probing HF on every sentence adds ~0.5s and can push Edge
+        # past Pipecat's audio-context idle timeout.
+        if self._access_checked:
+            return self.status
+
         token = self.settings.hf_token()
+        if not token:
+            self.status.available = False
+            self.status.gated = True
+            self.status.error = (
+                "Indic Parler-TTS is gated on Hugging Face. Accept the model terms at "
+                "https://huggingface.co/ai4bharat/indic-parler-tts and set HF_TOKEN."
+            )
+            self._access_checked = True
+            logger.warning(self.status.error)
+            return self.status
+
         try:
             from huggingface_hub import hf_hub_download, model_info
 
@@ -95,6 +112,7 @@ class IndicParlerTTSProvider(TTSProvider):
             else:
                 self.status.error = f"Indic Parler unavailable: {msg[:300]}"
             logger.warning(self.status.error)
+        self._access_checked = True
         return self.status
 
     async def load(self) -> None:

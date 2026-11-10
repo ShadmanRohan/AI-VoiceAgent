@@ -23,6 +23,8 @@ dependencies = [
   "aiofiles>=24.1.0",
   "websockets>=13.0",
   "pipecat-ai[moonshine,kokoro,silero,whisper,websocket,webrtc]==1.15.0",
+  "edge-tts>=7.0.0",
+  "bnunicodenormalizer>=0.1.7",
 ]
 
 [project.optional-dependencies]

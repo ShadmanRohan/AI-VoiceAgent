@@ -6,7 +6,10 @@ import {
   usePipecatClientTransportState,
   useRTVIClientEvent,
 } from '@pipecat-ai/client-react'
-import { SmallWebRTCTransport } from '@pipecat-ai/small-webrtc-transport'
+import {
+  ProtobufFrameSerializer,
+  WebSocketTransport,
+} from '@pipecat-ai/websocket-transport'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../services/api'
 import { AudioMeter } from './AudioMeter'
@@ -76,20 +79,28 @@ function VoiceInner({
     RTVIEvent.BotStoppedSpeaking,
     useCallback(() => {
       setAiSpeaking(false)
+      // Re-enable mic after AI audio finishes (unless user muted manually).
+      if (client && !muted) {
+        void client.enableMic(true)
+      }
       const text = botBuf.current.trim()
       botBuf.current = ''
       setPartialBot('')
       if (text) {
         setLines((prev) => [...prev, { id: crypto.randomUUID(), role: 'assistant', text }])
       }
-    }, []),
+    }, [client, muted]),
   )
 
   useRTVIClientEvent(
     RTVIEvent.BotStartedSpeaking,
     useCallback(() => {
       setAiSpeaking(true)
-    }, []),
+      // Mute mic while AI speaks so speaker echo cannot barge-in and cut TTS.
+      if (client) {
+        void client.enableMic(false)
+      }
+    }, [client]),
   )
 
   useEffect(() => {
@@ -112,11 +123,12 @@ function VoiceInner({
     if (!client) return
     setError(null)
     try {
-      await client.connect({
-        webrtcRequestParams: {
-          endpoint: `${import.meta.env.VITE_API_BASE || ''}/api/offer`,
-        },
-      })
+      const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
+      const base = import.meta.env.VITE_API_BASE || ''
+      const wsUrl = base
+        ? `${base.replace(/^http/, 'ws')}/ws`
+        : `${proto}://${window.location.host}/ws`
+      await client.connect({ wsUrl })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
@@ -298,7 +310,7 @@ function VoiceInner({
         <ul className="space-y-2 text-sm text-[var(--muted)]">
           <li>Partial transcripts appear italic until finalized.</li>
           <li>Only finalized user turns are stored in history.</li>
-          <li>Speak over the AI to barge in; or press Interrupt.</li>
+          <li>Mic mutes while the AI speaks so echo cannot cut the reply; use Interrupt to stop.</li>
           <li>Text send path exercises memory + Ollama without mic.</li>
         </ul>
         {textSessionId ? (
@@ -328,7 +340,12 @@ export function VoicePanel({ onSessionHint }: { onSessionHint: (id: string | nul
   const client = useMemo(
     () =>
       new PipecatClient({
-        transport: new SmallWebRTCTransport(),
+        // WebSocket audio works through the Cloudflare tunnel (WebRTC/TURN fails on CGNAT).
+        transport: new WebSocketTransport({
+          serializer: new ProtobufFrameSerializer(),
+          recorderSampleRate: 16000,
+          playerSampleRate: 24000,
+        }),
         enableMic: true,
       }),
     [],

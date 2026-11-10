@@ -63,15 +63,19 @@ async def collect_model_status() -> dict[str, Any]:
         "provider": _val(settings.bengali_tts_provider),
         "runtime": "parler-tts",
         "gated": status.gated,
-        "available": status.available,
+        "available": True,  # Edge bn-BD fallback keeps voice usable without HF_TOKEN
+        "indic_available": status.available,
         "loaded": status.loaded,
         "device": status.device,
         "voices": ["Aditi", "Arjun", "Tapan", "Rashmi"],
-        "error": status.error,
+        "fallback": "edge_tts bn-BD-NabanitaNeural / bn-BD-PradeepNeural",
+        "error": None,
+        "indic_error": status.error,
         "hf_token_configured": bool(settings.hf_token()),
         "accent_note": (
-            "Bengali language support does not guarantee a verified Bangladeshi accent. "
-            "Native-speaker listening is required before claiming accent authenticity."
+            "Active Bengali voice uses Edge bn-BD neural TTS until Indic Parler "
+            "HF access is configured. Native-speaker listening still required "
+            "before claiming accent authenticity."
         ),
     }
 

@@ -10,6 +10,7 @@ from app.config import Settings, get_settings
 from app.language.bengali_normalizer import has_bengali, prepare_tts_text
 from app.language.language_router import DetectedLanguage
 from app.speech.interfaces import AudioChunk, TTSProvider
+from app.speech.providers.edge_bengali_tts import EdgeBengaliTTSProvider
 from app.speech.providers.indic_parler_tts import get_indic_parler_provider
 
 
@@ -21,6 +22,7 @@ class TTSRouter(TTSProvider):
         self.settings = settings or get_settings()
         self._kokoro = None
         self._indic = get_indic_parler_provider(self.settings)
+        self._edge = EdgeBengaliTTSProvider(self.settings)
         self._cancel: set[str] = set()
 
     async def _ensure_kokoro(self):
@@ -81,17 +83,29 @@ class TTSRouter(TTSProvider):
                 else DetectedLanguage.ENGLISH
             )
 
-        use_indic = lang in {DetectedLanguage.BANGLA, DetectedLanguage.MIXED}
-        if use_indic:
-            status = await self._indic.check_access()
-            if not status.available:
-                # Do NOT silently speak Bengali with Kokoro as if it were Bengali TTS.
-                raise RuntimeError(
-                    status.error
-                    or "Bengali TTS (Indic Parler) unavailable. English Kokoro remains available."
-                )
+        use_bengali = lang in {DetectedLanguage.BANGLA, DetectedLanguage.MIXED} or has_bengali(
+            text
+        )
+        if use_bengali:
             bn_voice = voice or self.settings.bengali_tts_voice
-            async for chunk in self._indic.synthesize(
+            # Prefer local Indic Parler when HF access is configured.
+            status = await self._indic.check_access()
+            if status.available:
+                async for chunk in self._indic.synthesize(
+                    text, voice=bn_voice, speed=speed, generation_id=gid
+                ):
+                    if gid in self._cancel:
+                        self._cancel.discard(gid)
+                        return
+                    yield chunk
+                return
+
+            # Interim: bn-BD Edge neural voice (never Kokoro — no Bengali phonemes).
+            logger.debug(
+                "Indic Parler unavailable ({}); using Edge bn-BD TTS fallback",
+                status.error or "no access",
+            )
+            async for chunk in self._edge.synthesize(
                 text, voice=bn_voice, speed=speed, generation_id=gid
             ):
                 if gid in self._cancel:
@@ -100,7 +114,7 @@ class TTSRouter(TTSProvider):
                 yield chunk
             return
 
-        # English → Kokoro via direct onnx path for reliability outside Pipecat pipeline
+        # English / Latin → Kokoro (local)
         async for chunk in self._synthesize_kokoro(text, generation_id=gid):
             if gid in self._cancel:
                 self._cancel.discard(gid)

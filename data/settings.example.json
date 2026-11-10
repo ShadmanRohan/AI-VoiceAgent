@@ -1,0 +1,14 @@
+{
+  "performance_profile": "auto",
+  "ollama_model": "qwen3.5:9b",
+  "ollama_model_fallback": "qwen3.5:4b",
+  "language_mode": "auto",
+  "stt_provider": "whisper",
+  "stt_model": "large-v3",
+  "bengali_tts_voice": "Aditi",
+  "embedding_model": "intfloat/multilingual-e5-small",
+  "bilingual_memory": true,
+  "vad_start_secs": 0.25,
+  "vad_stop_secs": 0.85,
+  "vad_confidence": 0.72
+}

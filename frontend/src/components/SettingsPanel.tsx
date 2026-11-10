@@ -144,22 +144,23 @@ export function SettingsPanel() {
             value={String(settings.stt_provider)}
             onChange={(e) => set('stt_provider', e.target.value)}
           >
-            <option value="whisper_turbo">Whisper Large V3 Turbo</option>
+            <option value="whisper">Whisper large-v3 (best Bengali)</option>
+            <option value="whisper_turbo">Whisper Turbo (faster, weaker BN)</option>
             <option value="moonshine">Moonshine (fallback)</option>
-            <option value="whisper">Whisper</option>
           </select>
         </Field>
 
         <Field label="STT model">
           <select
             className="field"
-            value={String(settings.stt_model || 'large-v3-turbo')}
+            value={String(settings.stt_model || 'large-v3')}
             onChange={(e) => set('stt_model', e.target.value)}
           >
+            <option value="large-v3">large-v3</option>
             <option value="large-v3-turbo">large-v3-turbo</option>
-            <option value="tiny">tiny</option>
-            <option value="base">base</option>
             <option value="small">small</option>
+            <option value="base">base</option>
+            <option value="tiny">tiny</option>
           </select>
         </Field>
 

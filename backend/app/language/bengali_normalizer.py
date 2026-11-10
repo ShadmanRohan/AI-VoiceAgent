@@ -45,6 +45,24 @@ def normalize_unicode(text: str) -> str:
     text = text.replace("\u200c", "").replace("\u200d", "")  # ZWNJ/ZWJ cleanup
     text = MULTI_SPACE.sub(" ", text)
     text = re.sub(r"\s+([।.!?,;:])", r"\1", text)
+    # Formal Bengali Unicode cleanup (invalid কার / nukta / composition).
+    try:
+        from bnunicodenormalizer import Normalizer
+
+        bnorm = Normalizer(allow_english=True)
+        parts: list[str] = []
+        for tok in text.split(" "):
+            if BN_RANGE.search(tok):
+                m = re.match(r"^([\u0980-\u09FF]+)(.*)$", tok)
+                if m:
+                    core, tail = m.group(1), m.group(2)
+                    fixed = (bnorm(core) or {}).get("normalized") or core
+                    parts.append(fixed + tail)
+                    continue
+            parts.append(tok)
+        text = " ".join(parts)
+    except Exception:  # noqa: BLE001
+        pass
     return text.strip()
 
 
